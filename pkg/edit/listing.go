@@ -60,16 +60,22 @@ func initHistlist(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonB
 		AddGoFns(map[string]any{
 			"start": func(fm *eval.Frame, args ...string) {
 				filter := ""
+				var span [2]int
 				if len(args) > 0 {
 					filter = args[0]
 				} else if codeArea, ok := ed.app.ActiveWidget().(tk.CodeArea); ok {
-					// Default to the command being edited.
-					filter = codeArea.CopyState().Buffer.Content
+					// Default to the last segment of the command being edited, so
+					// that accepting a command replaces that segment rather than
+					// appending to the whole buffer.
+					content := codeArea.CopyState().Buffer.Content
+					start, end := filterSpan(content)
+					filter, span = content[start:end], [2]int{start, end}
 				}
 				w, err := modes.NewHistlist(ed.app, modes.HistlistSpec{
 					Bindings:      bindings,
 					AllCmds:       histStore.AllCmds,
 					InitialFilter: filter,
+					FilterSpan:    span,
 					Dedup: func() bool {
 						return dedup.Get().(bool)
 					},
