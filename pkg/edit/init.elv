@@ -90,6 +90,10 @@ set histlist:binding = (binding-table [
   &Ctrl-K= $histlist:delete~
 ])
 
+set location:binding = (binding-table [
+  &Ctrl-K= $location:delete~
+])
+
 set navigation:binding = (binding-table [
   &Left=     $navigation:left~
   &Right=    $navigation:right~
