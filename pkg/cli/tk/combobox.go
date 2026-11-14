@@ -41,7 +41,9 @@ func NewComboBox(spec ComboBoxSpec) ComboBox {
 		listBox:  NewListBox(spec.ListBox),
 		OnFilter: spec.OnFilter,
 	}
-	w.OnFilter(w, "")
+	// Fire the initial filter with whatever the code area was seeded with.
+	w.lastFilter = w.codeArea.CopyState().Buffer.Content
+	w.OnFilter(w, w.lastFilter)
 	return w
 }
 

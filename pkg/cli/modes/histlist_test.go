@@ -157,6 +157,32 @@ func startHistlist(app cli.App, spec HistlistSpec) {
 	startMode(app, w, err)
 }
 
+func TestHistlist_InitialFilter(t *testing.T) {
+	f := Setup()
+	defer f.Stop()
+
+	st := histutil.NewMemStore("foo", "bar", "baz")
+	startHistlist(f.App, HistlistSpec{AllCmds: st.AllCmds, InitialFilter: "ba"})
+
+	// The seeded filter is applied on open: only bar and baz remain.
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on)  ba", Styles,
+		"******************** ", term.DotHere, "\n",
+		"   1 bar\n",
+		"   2 baz                                          ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+
+	// Typing continues from the seed rather than resetting it.
+	f.TTY.Inject(term.K('z'))
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on)  baz", Styles,
+		"******************** ", term.DotHere, "\n",
+		"   2 baz                                          ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+}
+
 func TestHistlist_CmdAt(t *testing.T) {
 	st := histutil.NewMemStore("foo", "bar")
 	f := Setup()

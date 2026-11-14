@@ -58,10 +58,15 @@ func initHistlist(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonB
 	ns := eval.BuildNsNamed("edit:histlist").
 		AddVar("binding", bindingVar).
 		AddGoFns(map[string]any{
-			"start": func() {
+			"start": func(fm *eval.Frame, args ...string) {
+				filter := ""
+				if len(args) > 0 {
+					filter = args[0]
+				}
 				w, err := modes.NewHistlist(ed.app, modes.HistlistSpec{
-					Bindings: bindings,
-					AllCmds:  histStore.AllCmds,
+					Bindings:      bindings,
+					AllCmds:       histStore.AllCmds,
+					InitialFilter: filter,
 					Dedup: func() bool {
 						return dedup.Get().(bool)
 					},

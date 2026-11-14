@@ -38,6 +38,8 @@ type HistlistSpec struct {
 	Filter FilterSpec
 	// RPrompt of the code area (first row of the widget).
 	CodeAreaRPrompt func() ui.Text
+	// Initial content of the filter area. If unset, the filter starts empty.
+	InitialFilter string
 }
 
 // NewHistlist creates a new histlist mode.
@@ -77,6 +79,12 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 			},
 			RPrompt:     spec.CodeAreaRPrompt,
 			Highlighter: spec.Filter.Highlighter,
+			State: tk.CodeAreaState{
+				Buffer: tk.CodeBuffer{
+					Content: spec.InitialFilter,
+					Dot:     len(spec.InitialFilter),
+				},
+			},
 		},
 		ListBox: tk.ListBoxSpec{
 			Bindings: spec.Bindings,
