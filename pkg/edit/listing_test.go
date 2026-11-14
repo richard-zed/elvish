@@ -72,6 +72,26 @@ func TestListingBuiltins(t *testing.T) {
 
 // Smoke tests for individual addons.
 
+func TestHistlistAddon_StartsFilteredByCurrentCommand(t *testing.T) {
+	f := setup(t, storeOp(func(s storedefs.Store) {
+		s.AddCmd("ls")
+		s.AddCmd("echo")
+		s.AddCmd("make test")
+	}))
+
+	f.TTYCtrl.Inject(term.K('m'), term.K('a'), term.K('k'), term.K('e'))
+	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
+	f.TestTTY(t,
+		"~> make \n",
+		" HISTORY (dedup on) ", Styles,
+		"********************", term.DotHere, " make", Styles,
+		"Ctrl-K delete      \n",
+		"                 +++++++++++ ",
+		"   2 make test\n",
+		"                 +++++++++++ ",
+	)
+}
+
 func TestHistlistAddon(t *testing.T) {
 	f := setup(t, storeOp(func(s storedefs.Store) {
 		s.AddCmd("ls")

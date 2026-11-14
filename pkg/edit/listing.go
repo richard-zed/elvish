@@ -61,6 +61,9 @@ func initHistlist(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonB
 				filter := ""
 				if len(args) > 0 {
 					filter = args[0]
+				} else if codeArea, ok := ed.app.ActiveWidget().(tk.CodeArea); ok {
+					// Default to the command being edited.
+					filter = codeArea.CopyState().Buffer.Content
 				}
 				w, err := modes.NewHistlist(ed.app, modes.HistlistSpec{
 					Bindings:      bindings,
