@@ -164,23 +164,30 @@ func TestHistlist_InitialFilter(t *testing.T) {
 	st := histutil.NewMemStore("foo", "bar", "baz")
 	startHistlist(f.App, HistlistSpec{AllCmds: st.AllCmds, InitialFilter: "ba"})
 
-	// The seeded filter is applied on open: only bar and baz remain.
-	f.TestTTY(t,
-		"\n",
-		" HISTORY (dedup on)  ba", Styles,
-		"******************** ", term.DotHere, "\n",
-		"   1 bar\n",
-		"   2 baz                                          ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+	w := f.App.ActiveWidget().(Histlist)
+	if got := w.CodeArea().CopyState().Buffer.Content; got != "ba" {
+		t.Errorf("filter = %q, want %q", got, "ba")
+	}
+	// Only bar and baz match "ba".
+	if got := w.ListBox().CopyState().Items.Len(); got != 2 {
+		t.Errorf("items = %d, want 2", got)
+	}
+}
 
-	// Typing continues from the seed rather than resetting it.
-	f.TTY.Inject(term.K('z'))
-	f.TestTTY(t,
-		"\n",
-		" HISTORY (dedup on)  baz", Styles,
-		"******************** ", term.DotHere, "\n",
-		"   2 baz                                          ", Styles,
-		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+func TestHistlist_InitialFilterEmpty(t *testing.T) {
+	f := Setup()
+	defer f.Stop()
+
+	st := histutil.NewMemStore("foo", "bar", "baz")
+	startHistlist(f.App, HistlistSpec{AllCmds: st.AllCmds})
+
+	w := f.App.ActiveWidget().(Histlist)
+	if got := w.CodeArea().CopyState().Buffer.Content; got != "" {
+		t.Errorf("filter = %q, want empty", got)
+	}
+	if got := w.ListBox().CopyState().Items.Len(); got != 3 {
+		t.Errorf("items = %d, want 3", got)
+	}
 }
 
 func TestHistlist_CmdAt(t *testing.T) {

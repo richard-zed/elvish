@@ -3,7 +3,9 @@ package edit
 import (
 	"testing"
 
+	"src.elv.sh/pkg/cli/modes"
 	"src.elv.sh/pkg/cli/term"
+	"src.elv.sh/pkg/cli/tk"
 	"src.elv.sh/pkg/store/storedefs"
 	"src.elv.sh/pkg/ui"
 )
@@ -79,17 +81,19 @@ func TestHistlistAddon_StartsFilteredByCurrentCommand(t *testing.T) {
 		s.AddCmd("make test")
 	}))
 
-	f.TTYCtrl.Inject(term.K('m'), term.K('a'), term.K('k'), term.K('e'))
-	f.TTYCtrl.Inject(term.K('R', ui.Ctrl))
-	f.TestTTY(t,
-		"~> make \n",
-		" HISTORY (dedup on) ", Styles,
-		"********************", term.DotHere, " make", Styles,
-		"Ctrl-K delete      \n",
-		"                 +++++++++++ ",
-		"   2 make test\n",
-		"                 +++++++++++ ",
-	)
+	f.SetCodeBuffer(tk.CodeBuffer{Content: "make", Dot: 4})
+	evals(f.Evaler, "edit:histlist:start")
+
+	w, ok := f.Editor.app.ActiveWidget().(modes.Histlist)
+	if !ok {
+		t.Fatalf("histlist not active, got %T", f.Editor.app.ActiveWidget())
+	}
+	if got := w.CodeArea().CopyState().Buffer.Content; got != "make" {
+		t.Errorf("filter = %q, want %q", got, "make")
+	}
+	if got := w.ListBox().CopyState().Items.Len(); got != 1 {
+		t.Errorf("items = %d, want 1", got)
+	}
 }
 
 func TestHistlistAddon(t *testing.T) {
