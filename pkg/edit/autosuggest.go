@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"src.elv.sh/pkg/cli"
 	"src.elv.sh/pkg/cli/tk"
@@ -27,39 +26,22 @@ func defaultHistoryProvider(hs *histStore, code string) string {
 		return ""
 	}
 
-	// Search backwards through history for the most recent match
+	// Search backwards through history for the most recent match. The full
+	// command is returned: the code area computes the part to display, so the
+	// provider never has to reason about where the buffer ends.
 	for i := len(cmds) - 1; i >= 0; i-- {
-		text := cmds[i].Text
-		// Match commands that start with current input
+		text := trimSpaceRight(cmds[i].Text)
 		// Also handle multiline commands - only match against the first line
-		if strings.HasPrefix(text, code) {
-			text = TrimSpaceRight(text)
-			if len(text) > len(code) {
-				return text[len(code):]
-			}
+		if len(text) > len(code) && strings.HasPrefix(text, code) {
+			return text
 		}
 	}
 
 	return ""
 }
 
-var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
-
-func TrimSpaceRight(s string) string {
-	start := 0
-	stop := len(s)
-	for ; stop > start; stop-- {
-		c := s[stop-1]
-		if c >= utf8.RuneSelf {
-			// start has been already trimmed above, should trim end only
-			return strings.TrimRightFunc(s[start:stop], unicode.IsSpace)
-		}
-		if asciiSpace[c] == 0 {
-			break
-		}
-	}
-
-	return s[start:stop]
+func trimSpaceRight(s string) string {
+	return strings.TrimRightFunc(s, unicode.IsSpace)
 }
 
 func initAutoSuggestionSpec(appSpec *cli.AppSpec, hs *histStore, enabled vars.PtrVar, provider vars.PtrVar, ev *eval.Evaler) {

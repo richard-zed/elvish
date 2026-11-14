@@ -119,8 +119,10 @@ type codeArea struct {
 	// Buffer for keeping Pasted text during bracketed pasting.
 	pasteBuffer bytes.Buffer
 
-	asyncSuggestionSeq  atomic.Int32
-	asyncSuggestionCode string // Code for which we have a pending/current suggestion
+	asyncSuggestionSeq atomic.Int32
+	// Buffer the current autosuggestion was computed for. A suggestion is
+	// only valid while the buffer still has this exact prefix.
+	suggestionBase string
 }
 
 // NewCodeArea creates a new CodeArea from the given spec.
@@ -216,7 +218,24 @@ func (w *codeArea) resetInserts() {
 
 // updateAutoSuggestion updates the pending code with an autosuggestion.
 // This function assumes the state mutex is held.
+// dropStaleSuggestion clears the pending autosuggestion if the buffer no
+// longer starts with the text the suggestion was computed for. This is what
+// stops a suggestion from being grafted onto a different buffer.
+// This function assumes the state mutex is held.
+func (w *codeArea) dropStaleSuggestion() bool {
+	if !w.State.Pending.AutoSuggestion {
+		return false
+	}
+	if strings.HasPrefix(w.State.Buffer.Content, w.suggestionBase) {
+		return false
+	}
+	w.State.Pending = PendingCode{}
+	w.suggestionBase = ""
+	return true
+}
+
 func (w *codeArea) updateAutoSuggestion() {
+	w.dropStaleSuggestion()
 	// Don't override non-autosuggestion pending code (e.g., from completion)
 	if w.State.Pending.Content != "" && !w.State.Pending.AutoSuggestion {
 		return
@@ -228,96 +247,71 @@ func (w *codeArea) updateAutoSuggestion() {
 		// Clear autosuggestion if cursor is not at the end
 		if w.State.Pending.AutoSuggestion {
 			w.State.Pending = PendingCode{}
+			w.OnAsyncSuggestion()
 		}
 		return
 	}
 
 	code := buf.Content
 
-	// Check if the existing autosuggestion is still valid after typing.
-	// This prevents flickering when the user types characters that match the suggestion.
-	if w.State.Pending.AutoSuggestion && w.State.Pending.Content != "" {
-		// The suggestion was created at a certain point. We need to check if what
-		// the user has typed since then still matches the beginning of the suggestion.
-
-		// Check if From is within bounds (handles backspace case)
-		if w.State.Pending.From <= len(code) {
-			// Calculate what we've typed since the suggestion was made
-			typedSinceSuggestion := code[w.State.Pending.From:]
-
-			// If the suggestion still starts with what we've typed, adjust it
-			if strings.HasPrefix(w.State.Pending.Content, typedSinceSuggestion) {
-				// Keep the suggestion but adjust the content to show only the remaining part
-				// For example: originally "d --type f", typed "d", show " --type f"
-				remainingSuggestion := strings.TrimPrefix(w.State.Pending.Content, typedSinceSuggestion)
-
-				// Update the pending state
-				w.State.Pending = PendingCode{
-					From:           buf.Dot,
-					To:             buf.Dot,
-					Content:        remainingSuggestion,
-					AutoSuggestion: true,
-				}
-				// Don't launch a new async request - keep the existing suggestion
-				return
-			}
-		}
-		// Suggestion is no longer valid, clear it and get a new one
-		w.State.Pending = PendingCode{}
-	}
-
 	// Launch async suggestion request
 	seq := w.asyncSuggestionSeq.Add(1)
-	w.asyncSuggestionCode = code
 
-	// Launch a goroutine to get the suggestion
 	// There may be multiple irrelevant goroutines running for autosuggestions.
 	go func() {
-		suggestion := w.AutoSuggestionProvider(code)
+		candidate := w.AutoSuggestionProvider(code)
 
-		// Check if this suggestion is still relevant
-		stillRelevant := seq == w.asyncSuggestionSeq.Load() && code == w.asyncSuggestionCode
-
-		if !stillRelevant {
-			// User has typed more; discard this suggestion
-			return
-		}
-
-		// Apply the suggestion
+		// Apply the suggestion. The seq check and the buffer check both
+		// happen under the lock so that a suggestion can never be applied to
+		// a buffer it was not computed for.
 		w.StateMutex.Lock()
 		defer w.StateMutex.Unlock()
 
-		// Double-check conditions still hold
-		if w.State.Pending.Content != "" && !w.State.Pending.AutoSuggestion {
+		if seq != w.asyncSuggestionSeq.Load() {
+			// A newer request superseded this one.
 			return
 		}
 		if w.State.Buffer.Content != code || w.State.Buffer.Dot != len(code) {
+			// The buffer changed without a new request being launched.
+			return
+		}
+		if w.State.Pending.Content != "" && !w.State.Pending.AutoSuggestion {
+			// A non-autosuggestion pending (e.g. completion) took over.
 			return
 		}
 
-		if suggestion == "" {
-			// Clear autosuggestion if there's no suggestion
+		if !suggestionExtends(candidate, code) {
 			if w.State.Pending.AutoSuggestion {
 				w.State.Pending = PendingCode{}
+				// The clear must reach the screen, or a stale frame keeps
+				// showing the previous suggestion.
+				w.OnAsyncSuggestion()
 			}
-		} else {
-			// Check if we already have this suggestion - if so, keep the existing one
-			// to avoid flickering and preserve the From position
-			if w.State.Pending.AutoSuggestion && w.State.Pending.Content == suggestion {
-				// Same suggestion, keep it as is
-				return
-			}
-			w.State.Pending = PendingCode{
-				From:           w.State.Buffer.Dot,
-				To:             w.State.Buffer.Dot,
-				Content:        suggestion,
-				AutoSuggestion: true,
-			}
+			return
 		}
+
+		rest := candidate[len(code):]
+		if w.State.Pending.AutoSuggestion && w.State.Pending.Content == rest {
+			// Same suggestion, keep it to avoid flickering.
+			return
+		}
+		w.State.Pending = PendingCode{
+			From:           w.State.Buffer.Dot,
+			To:             w.State.Buffer.Dot,
+			Content:        rest,
+			AutoSuggestion: true,
+		}
+		w.suggestionBase = code
 
 		// Trigger a redraw
 		w.OnAsyncSuggestion()
 	}()
+}
+
+// suggestionExtends reports whether candidate is a usable extension of code.
+// The provider may return a full command or an empty string.
+func suggestionExtends(candidate, code string) bool {
+	return candidate != "" && len(candidate) > len(code) && strings.HasPrefix(candidate, code)
 }
 
 func (w *codeArea) handlePasteSetting(start bool) bool {
@@ -489,6 +483,7 @@ func (w *codeArea) handleKeyEvent(key ui.Key) bool {
 			Content: c.Content[:c.Dot-chop] + c.Content[c.Dot:],
 			Dot:     c.Dot - chop,
 		}
+		w.dropStaleSuggestion()
 		// Update autosuggestion after backspace
 		w.updateAutoSuggestion()
 		return true

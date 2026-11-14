@@ -64,8 +64,7 @@ func NewEditor(tty cli.TTY, ev *eval.Evaler, st storedefs.Store) *Editor {
 	}
 
 	autoSuggestEnabled := newBoolVar(true)
-	var autoSuggestProviderFn eval.Callable
-	autoSuggestProvider := newFnVar(autoSuggestProviderFn)
+	autoSuggestProvider := newFnVar(nil)
 	initMaxHeight(&appSpec, nb)
 	initReadlineHooks(&appSpec, ev, nb)
 	initAddCmdFilters(&appSpec, ev, nb, hs)
