@@ -65,6 +65,17 @@ func (s *testDB) CmdsWithSeq(from, upto int) ([]storedefs.Cmd, error) {
 	return cmds, nil
 }
 
+func (s *testDB) DelCmd(seq int) error {
+	if s.oneOffError != nil {
+		return s.error()
+	}
+	if seq < 0 || seq >= len(s.cmds) {
+		return storedefs.ErrNoMatchingCmd
+	}
+	s.cmds = append(s.cmds[:seq], s.cmds[seq+1:]...)
+	return nil
+}
+
 func (s *testDB) PrevCmd(upto int, prefix string) (storedefs.Cmd, error) {
 	if s.oneOffError != nil {
 		return storedefs.Cmd{}, s.error()

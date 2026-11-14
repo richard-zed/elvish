@@ -1,6 +1,7 @@
 package modes
 
 import (
+	"reflect"
 	"testing"
 
 	"src.elv.sh/pkg/cli"
@@ -127,4 +128,61 @@ func startHistwalk(app cli.App, cfg HistwalkSpec) {
 	}
 	app.PushAddon(w)
 	app.Redraw()
+}
+
+func TestHistWalk_Delete(t *testing.T) {
+	f := Setup(WithSpec(func(spec *cli.AppSpec) {
+		spec.CodeAreaState.Buffer = tk.CodeBuffer{Content: "ls", Dot: 2}
+	}))
+	defer f.Stop()
+
+	store := histutil.NewMemStore("echo", "ls -l", "ls -a")
+	w, err := NewHistwalk(f.App, HistwalkSpec{Store: store, Prefix: "ls"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.App.PushAddon(w)
+
+	// Deletes the newest matching entry.
+	if err := w.Delete(); err != nil {
+		t.Fatal(err)
+	}
+	testCmds(t, store, []string{"echo", "ls -l"})
+}
+
+func TestHistWalk_DeleteLastEmptiesAndPops(t *testing.T) {
+	f := Setup(WithSpec(func(spec *cli.AppSpec) {
+		spec.CodeAreaState.Buffer = tk.CodeBuffer{Content: "ls", Dot: 2}
+	}))
+	defer f.Stop()
+
+	store := histutil.NewMemStore("echo", "ls")
+	w, err := NewHistwalk(f.App, HistwalkSpec{Store: store, Prefix: "ls"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.App.PushAddon(w)
+
+	if err := w.Delete(); err != nil {
+		t.Fatal(err)
+	}
+	testCmds(t, store, []string{"echo"})
+	if _, ok := f.App.ActiveWidget().(Histwalk); ok {
+		t.Error("histwalk still active after deleting the last entry")
+	}
+}
+
+func testCmds(t *testing.T, store histutil.Store, want []string) {
+	t.Helper()
+	cmds, err := store.AllCmds()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range cmds {
+		got = append(got, c.Text)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("cmds = %q, want %q", got, want)
+	}
 }

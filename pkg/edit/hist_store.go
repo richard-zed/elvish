@@ -39,6 +39,12 @@ func (s *histStore) Cursor(prefix string) histutil.Cursor {
 	return cursor{&s.m, histutil.NewDedupCursor(s.hs.Cursor(prefix))}
 }
 
+func (s *histStore) DelCmd(seq int) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	return s.hs.DelCmd(seq)
+}
+
 func (s *histStore) FastForward() error {
 	s.m.Lock()
 	defer s.m.Unlock()
@@ -62,6 +68,12 @@ func (c cursor) Next() {
 	c.m.Lock()
 	defer c.m.Unlock()
 	c.c.Next()
+}
+
+func (c cursor) DelCmd(seq int) error {
+	c.m.Lock()
+	defer c.m.Unlock()
+	return c.c.DelCmd(seq)
 }
 
 func (c cursor) Get() (storedefs.Cmd, error) {

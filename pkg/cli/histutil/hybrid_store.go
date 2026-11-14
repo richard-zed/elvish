@@ -37,6 +37,15 @@ func (s hybridStore) AllCmds() ([]storedefs.Cmd, error) {
 	return append(shared, session...), err
 }
 
+func (s hybridStore) DelCmd(seq int) error {
+	// The seq identifies one entry; deleting from both is harmless since the
+	// other side is a no-op.
+	if err := s.session.DelCmd(seq); err == nil {
+		return nil
+	}
+	return s.shared.DelCmd(seq)
+}
+
 func (s hybridStore) Cursor(prefix string) Cursor {
 	return &hybridStoreCursor{
 		s.shared.Cursor(prefix), s.session.Cursor(prefix), false}
@@ -70,6 +79,13 @@ func (c *hybridStoreCursor) Next() {
 		c.useShared = false
 		c.session.Next()
 	}
+}
+
+func (c *hybridStoreCursor) DelCmd(seq int) error {
+	if err := c.session.DelCmd(seq); err == nil {
+		return nil
+	}
+	return c.shared.DelCmd(seq)
 }
 
 func (c *hybridStoreCursor) Get() (storedefs.Cmd, error) {

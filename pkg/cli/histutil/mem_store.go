@@ -29,12 +29,22 @@ func (s *memStore) AddCmd(cmd storedefs.Cmd) (int, error) {
 	return cmd.Seq, nil
 }
 
+func (s *memStore) DelCmd(seq int) error {
+	for i, cmd := range s.cmds {
+		if cmd.Seq == seq {
+			s.cmds = append(s.cmds[:i], s.cmds[i+1:]...)
+			return nil
+		}
+	}
+	return storedefs.ErrNoMatchingCmd
+}
+
 func (s *memStore) Cursor(prefix string) Cursor {
-	return &memStoreCursor{s.cmds, prefix, len(s.cmds)}
+	return &memStoreCursor{s, prefix, len(s.cmds)}
 }
 
 type memStoreCursor struct {
-	cmds   []storedefs.Cmd
+	store  *memStore
 	prefix string
 	index  int
 }
@@ -44,26 +54,34 @@ func (c *memStoreCursor) Prev() {
 		return
 	}
 	for c.index--; c.index >= 0; c.index-- {
-		if strings.HasPrefix(c.cmds[c.index].Text, c.prefix) {
+		if strings.HasPrefix(c.store.cmds[c.index].Text, c.prefix) {
 			return
 		}
 	}
 }
 
 func (c *memStoreCursor) Next() {
-	if c.index >= len(c.cmds) {
+	if c.index >= len(c.store.cmds) {
 		return
 	}
-	for c.index++; c.index < len(c.cmds); c.index++ {
-		if strings.HasPrefix(c.cmds[c.index].Text, c.prefix) {
+	for c.index++; c.index < len(c.store.cmds); c.index++ {
+		if strings.HasPrefix(c.store.cmds[c.index].Text, c.prefix) {
 			return
 		}
 	}
 }
 
+func (c *memStoreCursor) DelCmd(seq int) error {
+	if err := c.store.DelCmd(seq); err != nil {
+		return err
+	}
+	c.index--
+	return nil
+}
+
 func (c *memStoreCursor) Get() (storedefs.Cmd, error) {
-	if c.index < 0 || c.index >= len(c.cmds) {
+	if c.index < 0 || c.index >= len(c.store.cmds) {
 		return storedefs.Cmd{}, ErrEndOfHistory
 	}
-	return c.cmds[c.index], nil
+	return c.store.cmds[c.index], nil
 }

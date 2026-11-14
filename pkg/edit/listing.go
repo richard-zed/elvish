@@ -67,7 +67,8 @@ func initHistlist(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonB
 					Filter: filterSpec,
 					CodeAreaRPrompt: func() ui.Text {
 						return bindingTips(ed.ns, "histlist:binding",
-							bindingTip("dedup", "histlist:toggle-dedup"))
+							bindingTip("dedup", "histlist:toggle-dedup"),
+							bindingTip("delete", "histlist:delete"))
 					},
 				})
 				startMode(ed.app, w, err)
@@ -77,8 +78,30 @@ func initHistlist(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonB
 				listingRefilter(ed.app)
 				ed.app.Redraw()
 			},
+			"delete": func() { notifyError(ed.app, histlistDelete(ed.app, histStore)) },
 		}).Ns()
 	nb.AddNs("histlist", ns)
+}
+
+// histlistDelete deletes the entry selected in the active histlist mode.
+func histlistDelete(app cli.App, store histutil.Store) error {
+	w, ok := app.ActiveWidget().(modes.Histlist)
+	if !ok {
+		return errNotInHistoryMode
+	}
+	state := w.ListBox().CopyState()
+	cmd, ok := modes.CmdAt(state.Items, state.Selected)
+	if !ok {
+		return nil
+	}
+	if err := store.DelCmd(cmd.Seq); err != nil {
+		return err
+	}
+	// Rebuild the list from the store so the deleted entry disappears. The
+	// selection index stays put, selecting the entry below the deleted one.
+	listingRefilter(app)
+	app.Redraw()
+	return nil
 }
 
 func initLastcmd(ed *Editor, ev *eval.Evaler, histStore histutil.Store, commonBindingVar vars.PtrVar, nb eval.NsBuilder) {

@@ -33,10 +33,17 @@ fn histlist:start { }
 # command is shown.
 fn histlist:toggle-dedup { }
 
+# Deletes the selected entry from the history store.
+#
+# The deletion is permanent: it removes the entry from the on-disk history
+# database.
+fn histlist:delete { }
+
 # Keybinding for the history listing mode.
 #
 # Keys bound to [edit:histlist:toggle-dedup](#edit:histlist:toggle-dedup)
-# (Ctrl-D by default) will be shown in the history listing UI.
+# (Ctrl-D by default) or [edit:histlist:delete](#edit:histlist:delete) (Ctrl-K
+# by default) will be shown in the history listing UI.
 var histlist:binding
 
 # Starts the last command mode.

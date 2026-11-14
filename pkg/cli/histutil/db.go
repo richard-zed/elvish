@@ -11,4 +11,5 @@ type DB interface {
 	CmdsWithSeq(from, upto int) ([]storedefs.Cmd, error)
 	PrevCmd(upto int, prefix string) (storedefs.Cmd, error)
 	NextCmd(from int, prefix string) (storedefs.Cmd, error)
+	DelCmd(seq int) error
 }
