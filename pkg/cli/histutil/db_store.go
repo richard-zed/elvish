@@ -27,6 +27,10 @@ func (s dbStore) AddCmd(cmd storedefs.Cmd) (int, error) {
 	return s.db.AddCmd(cmd.Text)
 }
 
+func (s dbStore) DelCmd(seq int) error {
+	return s.db.DelCmd(seq)
+}
+
 func (s dbStore) Cursor(prefix string) Cursor {
 	return &dbStoreCursor{
 		s.db, prefix, s.upper, storedefs.Cmd{Seq: s.upper}, ErrEndOfHistory}
@@ -73,6 +77,10 @@ func (c *dbStoreCursor) set(cmd storedefs.Cmd, err error, endSeq int) {
 		// Don't change c.cmd
 		c.err = err
 	}
+}
+
+func (c *dbStoreCursor) DelCmd(seq int) error {
+	return c.db.DelCmd(seq)
 }
 
 func (c *dbStoreCursor) Get() (storedefs.Cmd, error) {

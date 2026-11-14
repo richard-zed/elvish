@@ -18,6 +18,8 @@ type Store interface {
 	// prefix. The cursor is initially placed just after the last command in the
 	// store.
 	Cursor(prefix string) Cursor
+	// DelCmd deletes the command with the given sequence number.
+	DelCmd(seq int) error
 }
 
 // Cursor is used to navigate a Store.
@@ -30,6 +32,9 @@ type Cursor interface {
 	// cursor is in an invalid state. If the cursor is "over the edge", the
 	// error is ErrEndOfHistory.
 	Get() (storedefs.Cmd, error)
+	// DelCmd deletes the command with the given sequence number from the
+	// underlying store.
+	DelCmd(seq int) error
 }
 
 // ErrEndOfHistory is returned by Cursor.Get if the cursor is currently over the

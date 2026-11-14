@@ -41,6 +41,24 @@ func (c *dedupCursor) Next() {
 	}
 }
 
+func (c *dedupCursor) DelCmd(seq int) error {
+	if err := c.c.DelCmd(seq); err != nil {
+		return err
+	}
+	// Drop the entry from the dedup cache so walking back doesn't show it.
+	for i, cmd := range c.stack {
+		if cmd.Seq == seq {
+			delete(c.occ, cmd.Text)
+			c.stack = append(c.stack[:i], c.stack[i+1:]...)
+			if c.current > i {
+				c.current--
+			}
+			break
+		}
+	}
+	return nil
+}
+
 func (c *dedupCursor) Get() (storedefs.Cmd, error) {
 	switch {
 	case c.current < 0:

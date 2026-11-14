@@ -30,6 +30,7 @@ func initHistWalk(ed *Editor, ev *eval.Evaler, hs *histStore, nb eval.NsBuilder)
 					}
 				},
 				"accept":       func() { notifyError(app, histwalkDo(app, modes.Histwalk.Accept)) },
+				"delete":       func() { notifyError(app, histwalkDo(app, modes.Histwalk.Delete)) },
 				"fast-forward": hs.FastForward,
 			}))
 }

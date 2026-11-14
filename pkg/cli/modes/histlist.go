@@ -15,6 +15,16 @@ type Histlist interface {
 	tk.ComboBox
 }
 
+// CmdAt returns the command at index i of a histlist items value. It returns
+// false if the items are not from a histlist or i is out of range.
+func CmdAt(it tk.Items, i int) (storedefs.Cmd, bool) {
+	h, ok := it.(histlistItems)
+	if !ok || i < 0 || i >= len(h.entries) {
+		return storedefs.Cmd{}, false
+	}
+	return h.entries[i], true
+}
+
 // HistlistSpec specifies the configuration for the histlist mode.
 type HistlistSpec struct {
 	// Key bindings.
@@ -52,6 +62,9 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 		last[cmd.Text] = i
 	}
 	cmdItems := histlistItems{cmds, last}
+	// Sentinel that cannot equal a real filter, so the first filtering always
+	// jumps to the last item.
+	lastFilter := "\x00"
 
 	w := tk.NewComboBox(tk.ComboBoxSpec{
 		CodeArea: tk.CodeAreaSpec{
@@ -81,8 +94,28 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 			},
 		},
 		OnFilter: func(w tk.ComboBox, p string) {
-			it := cmdItems.filter(spec.Filter.makePredicate(p), spec.Dedup())
-			w.ListBox().Reset(it, it.Len()-1)
+			// Re-read the store so that deletions are reflected.
+			cmds, err := spec.AllCmds()
+			if err != nil {
+				w.ListBox().Reset(cmdItems, cmdItems.Len()-1)
+				return
+			}
+			last := map[string]int{}
+			for i, cmd := range cmds {
+				last[cmd.Text] = i
+			}
+			it := histlistItems{cmds, last}.filter(
+				spec.Filter.makePredicate(p), spec.Dedup())
+			// Jump to the last item when the filter changes, but hold the
+			// selection when the list is merely refreshed in place.
+			selected := it.Len() - 1
+			if p == lastFilter {
+				if prev := w.ListBox().CopyState().Selected; prev < selected {
+					selected = prev
+				}
+			}
+			lastFilter = p
+			w.ListBox().Reset(it, selected)
 		},
 	})
 	return w, nil

@@ -87,6 +87,7 @@ set listing:binding = (binding-table [
 
 set histlist:binding = (binding-table [
   &Ctrl-D= $histlist:toggle-dedup~
+  &Ctrl-K= $histlist:delete~
 ])
 
 set navigation:binding = (binding-table [
@@ -116,6 +117,7 @@ set completion:binding = (binding-table [
 set history:binding = (binding-table [
   &Up=       $history:up~
   &Down=     $history:down-or-quit~
+  &Ctrl-K=   $history:delete~
   &Ctrl-'['= $close-mode~
 ])
 

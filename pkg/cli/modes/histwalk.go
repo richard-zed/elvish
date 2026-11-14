@@ -19,6 +19,9 @@ type Histwalk interface {
 	Next() error
 	// Update buffer with current entry. Always returns a nil error.
 	Accept() error
+	// Delete the current entry from the store and move to the next one. If the
+	// history becomes empty, the mode is closed.
+	Delete() error
 }
 
 // HistwalkSpec specifies the configuration for the histwalk mode.
@@ -107,6 +110,35 @@ func (w *histwalk) walk(f func(histutil.Cursor), undo func(histutil.Cursor)) err
 		undo(w.cursor)
 	}
 	return err
+}
+
+func (w *histwalk) Delete() error {
+	cmd, err := w.cursor.Get()
+	if err != nil {
+		return err
+	}
+	// Move away first: the cursor may be sitting on an entry that is about to
+	// disappear from the store.
+	w.cursor.Next()
+	if _, err := w.cursor.Get(); err != nil {
+		// Nothing newer; try older instead.
+		w.cursor.Prev()
+		w.cursor.Prev()
+		if _, err := w.cursor.Get(); err != nil {
+			// History is now empty.
+			if err := w.cursor.DelCmd(cmd.Seq); err != nil {
+				return err
+			}
+			w.Dismiss()
+			w.app.PopAddon()
+			return nil
+		}
+	}
+	if err := w.cursor.DelCmd(cmd.Seq); err != nil {
+		return err
+	}
+	w.updatePending()
+	return nil
 }
 
 func (w *histwalk) Dismiss() {

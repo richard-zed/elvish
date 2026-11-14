@@ -25,3 +25,7 @@ fn history:fast-forward { }
 # Replaces the content of the buffer with the current history mode entry, and
 # closes history mode.
 fn history:accept { }
+
+# Deletes the current history mode entry from the history store, and moves to the
+# next entry. If the history becomes empty, closes history mode.
+fn history:delete { }
