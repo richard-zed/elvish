@@ -25,7 +25,11 @@ fn listing:page-up { }
 fn listing:page-down { }
 
 # Starts the history listing mode.
-fn histlist:start { }
+#
+# An optional argument sets the initial filter. For example,
+# `histlist:start make` opens the listing pre-filtered to commands containing
+# "make".
+fn histlist:start {|@filter?| }
 
 # Toggles deduplication in history listing mode.
 #

@@ -156,3 +156,79 @@ func startHistlist(app cli.App, spec HistlistSpec) {
 	w, err := NewHistlist(app, spec)
 	startMode(app, w, err)
 }
+
+func TestHistlist_InitialFilter(t *testing.T) {
+	f := Setup()
+	defer f.Stop()
+
+	st := histutil.NewMemStore("foo", "bar", "baz")
+	startHistlist(f.App, HistlistSpec{AllCmds: st.AllCmds, InitialFilter: "ba"})
+
+	// The seeded filter is applied on open: only bar and baz remain.
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on)  ba", Styles,
+		"******************** ", term.DotHere, "\n",
+		"   1 bar\n",
+		"   2 baz                                          ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+
+	// Typing continues from the seed rather than resetting it.
+	f.TTY.Inject(term.K('z'))
+	f.TestTTY(t,
+		"\n",
+		" HISTORY (dedup on)  baz", Styles,
+		"******************** ", term.DotHere, "\n",
+		"   2 baz                                          ", Styles,
+		"++++++++++++++++++++++++++++++++++++++++++++++++++")
+}
+
+func TestHistlist_CmdAt(t *testing.T) {
+	st := histutil.NewMemStore("foo", "bar")
+	f := Setup()
+	defer f.Stop()
+	startHistlist(f.App, HistlistSpec{AllCmds: st.AllCmds})
+
+	w := f.App.ActiveWidget().(Histlist)
+	state := w.ListBox().CopyState()
+	cmd, ok := CmdAt(state.Items, 0)
+	if !ok || cmd.Text != "foo" || cmd.Seq != 0 {
+		t.Errorf("CmdAt(0) = %v, %v; want {foo 0}, true", cmd, ok)
+	}
+	if _, ok := CmdAt(state.Items, 99); ok {
+		t.Error("CmdAt(99) reported ok for out-of-range index")
+	}
+	if _, ok := CmdAt(nil, 0); ok {
+		t.Error("CmdAt reported ok for non-histlist items")
+	}
+}
+
+func TestHistlist_RefilterSeesStoreChanges(t *testing.T) {
+	f := Setup()
+	defer f.Stop()
+
+	st := histutil.NewMemStore("foo", "bar", "baz")
+	startHistlist(f.App, HistlistSpec{AllCmds: st.AllCmds})
+
+	w := f.App.ActiveWidget().(Histlist)
+	if lb := w.ListBox(); lb.CopyState().Items.Len() != 3 {
+		t.Fatalf("initial items = %d, want 3", lb.CopyState().Items.Len())
+	}
+
+	// Deleting from the store and refiltering must rebuild the list.
+	if err := st.DelCmd(1); err != nil {
+		t.Fatal(err)
+	}
+	w.Refilter()
+
+	state := w.ListBox().CopyState()
+	if state.Items.Len() != 2 {
+		t.Fatalf("after delete items = %d, want 2", state.Items.Len())
+	}
+	if cmd, _ := CmdAt(state.Items, 0); cmd.Text != "foo" {
+		t.Errorf("item 0 = %q, want \"foo\"", cmd.Text)
+	}
+	if cmd, _ := CmdAt(state.Items, 1); cmd.Text != "baz" {
+		t.Errorf("item 1 = %q, want \"baz\"", cmd.Text)
+	}
+}
