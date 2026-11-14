@@ -35,6 +35,10 @@ func (ts locationStore) Dirs(blacklist map[string]struct{}) ([]storedefs.Dir, er
 	return dirs, ts.dirsError
 }
 
+func (ts locationStore) DelDir(dir string) error {
+	return nil
+}
+
 func (ts locationStore) Chdir(dir string) error {
 	if ts.chdir == nil {
 		return nil

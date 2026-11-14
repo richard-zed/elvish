@@ -37,13 +37,26 @@ type LocationSpec struct {
 	IterateWorkspaces LocationWSIterator
 	// Configuration for the filter.
 	Filter FilterSpec
+	// RPrompt of the code area (first row of the widget).
+	CodeAreaRPrompt func() ui.Text
 }
 
 // LocationStore defines the interface for interacting with the directory history.
 type LocationStore interface {
 	Dirs(blacklist map[string]struct{}) ([]storedefs.Dir, error)
+	DelDir(dir string) error
 	Chdir(dir string) error
 	Getwd() (string, error)
+}
+
+// DirAt returns the directory at index i of a location list. It returns false
+// if the items are not from a location list or i is out of range.
+func DirAt(it tk.Items, i int) (storedefs.Dir, bool) {
+	l, ok := it.(locationList)
+	if !ok || i < 0 || i >= len(l.dirs) {
+		return storedefs.Dir{}, false
+	}
+	return l.dirs[i], true
 }
 
 // A special score for pinned directories.
@@ -57,43 +70,55 @@ func NewLocation(app cli.App, cfg LocationSpec) (Location, error) {
 		return nil, errNoDirectoryHistoryStore
 	}
 
-	dirs := []storedefs.Dir{}
-	blacklist := map[string]struct{}{}
 	wsKind, wsRoot := "", ""
 
-	if cfg.IteratePinned != nil {
-		cfg.IteratePinned(func(s string) {
-			blacklist[s] = struct{}{}
-			dirs = append(dirs, storedefs.Dir{Score: pinnedScore, Path: s})
-		})
-	}
-	if cfg.IterateHidden != nil {
-		cfg.IterateHidden(func(s string) { blacklist[s] = struct{}{} })
-	}
-	wd, err := cfg.Store.Getwd()
-	if err == nil {
-		blacklist[wd] = struct{}{}
-		if cfg.IterateWorkspaces != nil {
-			wsKind, wsRoot = cfg.IterateWorkspaces.Parse(wd)
+	// buildDirs reads the current directory history. Called at construction and
+	// whenever the list needs rebuilding after a deletion.
+	buildDirs := func() ([]storedefs.Dir, error) {
+		dirs := []storedefs.Dir{}
+		blacklist := map[string]struct{}{}
+		if cfg.IteratePinned != nil {
+			cfg.IteratePinned(func(s string) {
+				blacklist[s] = struct{}{}
+				dirs = append(dirs, storedefs.Dir{Score: pinnedScore, Path: s})
+			})
 		}
-	}
-	storedDirs, err := cfg.Store.Dirs(blacklist)
-	if err != nil {
-		return nil, fmt.Errorf("db error: %v", err)
-	}
-	for _, dir := range storedDirs {
-		if filepath.IsAbs(dir.Path) {
-			dirs = append(dirs, dir)
-		} else if wsKind != "" && hasPathPrefix(dir.Path, wsKind) {
-			dirs = append(dirs, dir)
+		if cfg.IterateHidden != nil {
+			cfg.IterateHidden(func(s string) { blacklist[s] = struct{}{} })
 		}
+		wd, err := cfg.Store.Getwd()
+		if err == nil {
+			blacklist[wd] = struct{}{}
+			if cfg.IterateWorkspaces != nil {
+				wsKind, wsRoot = cfg.IterateWorkspaces.Parse(wd)
+			}
+		}
+		storedDirs, err := cfg.Store.Dirs(blacklist)
+		if err != nil {
+			return nil, fmt.Errorf("db error: %v", err)
+		}
+		for _, dir := range storedDirs {
+			if filepath.IsAbs(dir.Path) {
+				dirs = append(dirs, dir)
+			} else if wsKind != "" && hasPathPrefix(dir.Path, wsKind) {
+				dirs = append(dirs, dir)
+			}
+		}
+		return dirs, nil
 	}
 
-	l := locationList{dirs}
+	dirs, err := buildDirs()
+	if err != nil {
+		return nil, err
+	}
+
+	_ = dirs
+	lastFilter := "\x00"
 
 	w := tk.NewComboBox(tk.ComboBoxSpec{
 		CodeArea: tk.CodeAreaSpec{
 			Prompt:      modePrompt(" LOCATION ", true),
+			RPrompt:     cfg.CodeAreaRPrompt,
 			Highlighter: cfg.Filter.Highlighter,
 		},
 		ListBox: tk.ListBoxSpec{
@@ -111,7 +136,21 @@ func NewLocation(app cli.App, cfg LocationSpec) (Location, error) {
 			},
 		},
 		OnFilter: func(w tk.ComboBox, p string) {
-			w.ListBox().Reset(l.filter(cfg.Filter.makePredicate(p)), 0)
+			// Re-read the store so that deletions are reflected.
+			dirs, err := buildDirs()
+			if err != nil {
+				app.Notify(ErrorText(err))
+				return
+			}
+			it := locationList{dirs}.filter(cfg.Filter.makePredicate(p))
+			selected := 0
+			if p == lastFilter {
+				if prev := w.ListBox().CopyState().Selected; prev < it.Len() {
+					selected = prev
+				}
+			}
+			lastFilter = p
+			w.ListBox().Reset(it, selected)
 		},
 	})
 	return w, nil

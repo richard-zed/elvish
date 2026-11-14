@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"errors"
 	"os"
 
 	"src.elv.sh/pkg/cli"
@@ -136,15 +137,22 @@ func initLocation(ed *Editor, ev *eval.Evaler, st storedefs.Store, commonBinding
 				"pinned":     pinnedVar,
 				"workspaces": workspacesVar,
 			}).
-			AddGoFn("start", func() {
-				w, err := modes.NewLocation(ed.app, modes.LocationSpec{
-					Bindings: bindings, Store: dirStore{ev, st},
-					IteratePinned:     adaptToIterateString(pinnedVar),
-					IterateHidden:     adaptToIterateString(hiddenVar),
-					IterateWorkspaces: workspaceIterator,
-					Filter:            filterSpec,
-				})
-				startMode(ed.app, w, err)
+			AddGoFns(map[string]any{
+				"start": func() {
+					w, err := modes.NewLocation(ed.app, modes.LocationSpec{
+						Bindings: bindings, Store: dirStore{ev, st},
+						IteratePinned:     adaptToIterateString(pinnedVar),
+						IterateHidden:     adaptToIterateString(hiddenVar),
+						IterateWorkspaces: workspaceIterator,
+						Filter:            filterSpec,
+						CodeAreaRPrompt: func() ui.Text {
+							return bindingTips(ed.ns, "location:binding",
+								bindingTip("delete", "location:delete"))
+						},
+					})
+					startMode(ed.app, w, err)
+				},
+				"delete": func() { notifyError(ed.app, locationDelete(ed.app, dirStore{ev, st})) },
 			}))
 	ev.AfterChdir = append(ev.AfterChdir, func(string) {
 		wd, err := os.Getwd()
@@ -160,6 +168,35 @@ func initLocation(ed *Editor, ev *eval.Evaler, st storedefs.Store, commonBinding
 			}
 		}
 	})
+}
+
+var errNotInLocationMode = errors.New("not in location mode")
+
+// locationDelete deletes the directory selected in the active location mode
+// from the directory history.
+func locationDelete(app cli.App, store modes.LocationStore) error {
+	w, ok := app.ActiveWidget().(modes.Location)
+	if !ok {
+		return errNotInLocationMode
+	}
+	state := w.ListBox().CopyState()
+	dir, ok := modes.DirAt(state.Items, state.Selected)
+	if !ok {
+		return nil
+	}
+	if err := store.DelDir(dir.Path); err != nil {
+		return err
+	}
+	// Rebuild the list from the store so the deleted directory disappears.
+	locationRefilter(app)
+	app.Redraw()
+	return nil
+}
+
+func locationRefilter(app cli.App) {
+	if w, ok := activeComboBox(app); ok {
+		w.Refilter()
+	}
 }
 
 func listingAccept(app cli.App) {
@@ -230,6 +267,17 @@ type dirStore struct {
 
 func (d dirStore) Chdir(path string) error {
 	return d.ev.Chdir(path)
+}
+
+func (d dirStore) DelDir(path string) error {
+	if d.st == nil {
+		return nil
+	}
+	// Pinned directories have no history entry to remove.
+	if path == "" {
+		return nil
+	}
+	return d.st.DelDir(path)
 }
 
 func (d dirStore) Dirs(blacklist map[string]struct{}) ([]storedefs.Dir, error) {

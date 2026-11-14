@@ -55,7 +55,16 @@ var lastcmd:binding
 # Starts the location mode.
 fn location:start
 
+# Deletes the selected directory from the directory history.
+#
+# Only entries from the directory history are removed; pinned directories are
+# configured separately via `$edit:location:pinned`.
+fn location:delete
+
 # Keybinding for the location mode.
+#
+# Keys bound to [edit:location:delete](#edit:location:delete) (Ctrl-K by
+# default) will be shown in the location UI.
 var location:binding
 
 # A list of directories to hide in the location addon.
