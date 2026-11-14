@@ -62,10 +62,10 @@ func patchPending(c CodeBuffer, p PendingCode) (CodeBuffer, int, int) {
 	if p.From == p.To && p.Content == "" {
 		return c, 0, 0
 	}
-	// An autosuggestion is a continuation of the buffer at its anchor. If the
-	// anchor no longer ends at a shorter buffer, the suggestion belongs to
-	// different text and must not be grafted onto this one.
-	if p.AutoSuggestion && p.From > len(c.Content) {
+	// An autosuggestion is a continuation of the buffer at its anchor, so the
+	// anchor must be exactly the end of the buffer. Anything else would splice
+	// the suggestion before text typed after it and strand the cursor past it.
+	if p.AutoSuggestion && (p.From != len(c.Content) || p.From != p.To) {
 		return c, 0, 0
 	}
 	newContent := c.Content[:p.From] + p.Content + c.Content[p.To:]
