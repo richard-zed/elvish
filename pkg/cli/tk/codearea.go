@@ -218,15 +218,17 @@ func (w *codeArea) resetInserts() {
 
 // updateAutoSuggestion updates the pending code with an autosuggestion.
 // This function assumes the state mutex is held.
-// dropStaleSuggestion clears the pending autosuggestion if the buffer no
-// longer starts with the text the suggestion was computed for. This is what
-// stops a suggestion from being grafted onto a different buffer.
+// dropStaleSuggestion clears the pending autosuggestion unless it appends to
+// the buffer at the very end. A suggestion is anchored at a position, not a
+// prefix: text typed after the anchor would otherwise be spliced past the
+// suggestion and the cursor would jump to the end of the line.
 // This function assumes the state mutex is held.
 func (w *codeArea) dropStaleSuggestion() bool {
-	if !w.State.Pending.AutoSuggestion {
+	p := w.State.Pending
+	if !p.AutoSuggestion {
 		return false
 	}
-	if strings.HasPrefix(w.State.Buffer.Content, w.suggestionBase) {
+	if p.From == len(w.State.Buffer.Content) && w.State.Buffer.Content == w.suggestionBase {
 		return false
 	}
 	w.State.Pending = PendingCode{}
