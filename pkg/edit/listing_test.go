@@ -246,3 +246,48 @@ func TestCustomListing_PassingBytesCallback(t *testing.T) {
 		"~> # x", Styles,
 		"   ccc", term.DotHere)
 }
+
+func TestHistlistAccept_ReplacesFilterSpan(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		dot        int
+		pick       int // index of the item to accept
+		wantBuffer string
+	}{
+		{"whole buffer", "just", 4, 0, "just a note"},
+		{"after semicolon", "ls; ju", 6, 0, "ls; just a note"},
+		{"after pipe", "ls | ju", 7, 0, "ls | just a note"},
+		{"trailing separator", "ls |", 4, 0, "ls | just a note"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := setup(t, storeOp(func(s storedefs.Store) {
+				s.AddCmd("make")
+				s.AddCmd("just a note")
+			}))
+			f.SetCodeBuffer(tk.CodeBuffer{Content: tc.content, Dot: tc.dot})
+			evals(f.Evaler, "edit:histlist:start")
+
+			w, ok := f.Editor.app.ActiveWidget().(modes.Histlist)
+			if !ok {
+				t.Fatalf("histlist not active, got %T", f.Editor.app.ActiveWidget())
+			}
+			evals(f.Evaler, "edit:listing:accept")
+
+			t.Logf("items=%d selected=%d filter=%q",
+				w.ListBox().CopyState().Items.Len(),
+				w.ListBox().CopyState().Selected,
+				w.CodeArea().CopyState().Buffer.Content)
+			_ = w
+			ca, ok := f.Editor.app.ActiveWidget().(tk.CodeArea)
+			if !ok {
+				t.Fatalf("no code area after accept, got %T", f.Editor.app.ActiveWidget())
+			}
+			got := ca.CopyState().Buffer.Content
+			if got != tc.wantBuffer {
+				t.Errorf("buffer = %q, want %q", got, tc.wantBuffer)
+			}
+		})
+	}
+}

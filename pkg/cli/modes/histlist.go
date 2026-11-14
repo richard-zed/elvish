@@ -30,9 +30,16 @@ type HistlistSpec struct {
 	CodeAreaRPrompt func() ui.Text
 	// Initial content of the filter area. If unset, the filter starts empty.
 	InitialFilter string
+	// FilterSpan is the [start, end) byte span of the buffer that InitialFilter
+	// was drawn from. On accept, that span is replaced by the selected command.
+	// A zero value means the filter was not drawn from the buffer, in which case
+	// the command is inserted at dot.
+	FilterSpan [2]int
 }
 
 // NewHistlist creates a new histlist mode.
+func isSpace(b byte) bool { return b == ' ' || b == '\t' || b == '\n' }
+
 func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 	codeArea, err := FocusedCodeArea(app)
 	if err != nil {
@@ -79,11 +86,27 @@ func NewHistlist(app cli.App, spec HistlistSpec) (Histlist, error) {
 				text := it.(histlistItems).entries[i].Text
 				codeArea.MutateState(func(s *tk.CodeAreaState) {
 					buf := &s.Buffer
-					if buf.Content == "" {
-						buf.InsertAtDot(text)
-					} else {
-						buf.InsertAtDot("\n" + text)
+					start, end := spec.FilterSpan[0], spec.FilterSpan[1]
+					if start == 0 && end == 0 {
+						// Filter was not drawn from a buffer span; chain.
+						if buf.Content == "" {
+							buf.InsertAtDot(text)
+						} else {
+							buf.InsertAtDot("\n" + text)
+						}
+						return
 					}
+					if start == end && end == len(buf.Content) {
+						// Trailing separator: chain, keeping a separating space.
+						if c := buf.Content; c != "" && !isSpace(c[len(c)-1]) {
+							buf.Content += " "
+						}
+						buf.Content += text
+						buf.Dot = len(buf.Content)
+						return
+					}
+					buf.Content = buf.Content[:start] + text + buf.Content[end:]
+					buf.Dot = start + len(text)
 				})
 				app.PopAddon()
 			},
